@@ -221,17 +221,21 @@ def draw_zone_counts(frame, resolver: ZoneResolver, zone_counts: dict[str, int])
     for index, (zone_id, count) in enumerate(sorted(zone_counts.items())):
         cv2.putText(frame, f"{zone_id}: {count}", (10, 30 + index * 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
-
+# Gustavo Ojeda -- Predictive Assistance Alerts: new parameter to draw each detected
+# person's zone dwell time on screen.
 def draw_detections(
     frame,
     detections: list[dict],
     zone_ids: list[str | None] | None = None,
     world_positions: list[tuple[float, float] | None] | None = None,
+    dwell_seconds: list[float] | None = None,
 ) -> None:
     """Draw each detected person's bounding box, predictions, resolved zone, and world position onto the frame."""
     zone_ids = zone_ids if zone_ids is not None else [None] * len(detections)
     world_positions = world_positions if world_positions is not None else [None] * len(detections)
-    for det, zone_id, position in zip(detections, zone_ids, world_positions):
+    dwell_seconds = dwell_seconds if dwell_seconds is not None else [None] * len(detections)
+    #Adding dwell_seconds parameter- Gustavo Ojeda
+    for det, zone_id, position, dwell in zip(detections, zone_ids, world_positions, dwell_seconds):
         x, y, w, h = det["bbox"]
         conf = det["confidence"]
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -246,6 +250,10 @@ def draw_detections(
             label = f"({position[0]:+.1f}, {position[1]:+.1f})m {zone_id or 'no zone'}"
             colour = (255, 0, 0) if zone_id else (0, 165, 255)
             cv2.putText(frame, label, (x, y + h + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.55, colour, 2)
+        if dwell is not None:
+            # Gustavo Ojeda -- Predictive Assistance Alerts: show this person's zone dwell
+            # time on screen, so it's visible while testing with the live camera.
+            cv2.putText(frame, f"dwell: {dwell:.1f}s", (x, y + h + 38), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2)
 
 
 def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
@@ -416,7 +424,9 @@ def main() -> None:
             ):
                 if not person.should_emit(zone_id, timestamp):
                     continue
-                dwell = counter.dwell_seconds(track_id, timestamp)
+                # Gustavo Ojeda -- Predictive Assistance Alerts: use the person's own zone dwell timer
+                # instead of the line counter, so dwell reflects real time in the ArUco zone.
+                dwell = person.dwell_in_zone(timestamp)
                 present = registry.confirmed_count()
                 count = zone_counts.get(zone_id, present) if resolver is not None else present
                 reported = reported_detection(det, person)
@@ -431,8 +441,14 @@ def main() -> None:
                     )
                 person.mark_emitted(zone_id, timestamp)
 
+            # Gustavo Ojeda -- Predictive Assistance Alerts: drawing happens once per frame, outside
+            # the per-person emission loop above -- inside it, the overlay was only drawn on the
+            # frames where someone emitted a record, which made the preview flicker.
             if not args.benchmark or streamer is not None:
-                draw_detections(frame, detections, zone_ids, world_positions)
+                # Gustavo Ojeda -- Predictive Assistance Alerts: compute each visible
+                # person's current zone dwell time, to draw it on screen for live testing.
+                dwell_times = [person.dwell_in_zone(timestamp) for person in people]
+                draw_detections(frame, detections, zone_ids, world_positions, dwell_times)
                 if resolver is None:
                     draw_counter(frame, counter, width, height)
                 else:

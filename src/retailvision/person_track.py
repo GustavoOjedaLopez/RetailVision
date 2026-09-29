@@ -56,6 +56,11 @@ EMOTION_WINDOW = 5
 # "still here, still neutral" from "gone".
 HEARTBEAT_SECONDS = 10.0
 
+# Gustavo Ojeda -- Predictive Assistance Alerts: how many recent zones to remember per
+# track, so back-and-forth movement between zones can be detected.
+#This will remember the 5 last zones where each person has passed
+ZONE_HISTORY_LENGTH = 5
+
 
 class PersonTrack:
     """One tracked person: votes on their identity, smooths their emotion, and remembers what was last reported."""
@@ -73,6 +78,11 @@ class PersonTrack:
         self.last_emitted_at: float | None = None
         self.last_emitted_emotion: str | None = None
         self.last_emitted_zone: str | None = None
+        # Gustavo Ojeda -- Predictive Assistance Alerts: zone dwell timer (when the track entered
+        # its current zone) and a short history of recently visited zones, for measuring
+        # how long someone stays in a zone.
+        self.zone_entered_at: float = timestamp
+        self.zone_history: deque[str] = deque(maxlen=ZONE_HISTORY_LENGTH)
 
     @property
     def confirmed(self) -> bool:
@@ -110,9 +120,21 @@ class PersonTrack:
 
     def mark_emitted(self, zone_id: str | None, timestamp: float) -> None:
         """Record what was just reported, so the next frame is compared against it."""
+        # Gustavo Ojeda -- Predictive Assistance Alerts: only reset the zone timer and record the
+        # new zone when the zone actually changed, not on every heartbeat re-emit.
+        if zone_id != self.last_emitted_zone:
+            self.zone_entered_at = timestamp
+            if zone_id is not None:
+                self.zone_history.append(zone_id)
         self.last_emitted_at = timestamp
         self.last_emitted_emotion = self.emotion
         self.last_emitted_zone = zone_id
+
+    # Gustavo Ojeda -- Predictive Assistance Alerts: exposes the zone dwell timer so callers
+    # can read how long this track has continuously been in its current zone.
+    def dwell_in_zone(self, timestamp: float)-> float:
+        """How many senconds this track has continuously been in its current zone"""
+        return timestamp - self.zone_entered_at
 
 
 class TrackRegistry:

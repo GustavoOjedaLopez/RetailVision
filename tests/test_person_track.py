@@ -99,6 +99,27 @@ class PersonTrackTests(unittest.TestCase):
         self.assertEqual(record["gender"], "Female")
         self.assertEqual(record["emotion"], "neutral")
 
+    def test_dwell_in_zone_resets_on_zone_change(self):
+        """dwell_in_zone measures time since the track's last zone change, not since it was first seen."""
+        track = PersonTrack(0.0)
+        for frame in range(CONFIRM_FRAMES):
+            track.observe(detection(), float(frame))
+        track.mark_emitted("zone-a", 5.0)
+        self.assertEqual(track.dwell_in_zone(15.0), 10.0)
+        track.mark_emitted("zone-b", 20.0)
+        self.assertEqual(track.dwell_in_zone(21.0), 1.0)
+
+    def test_zone_history_records_zone_changes_only(self):
+        """zone_history remembers the sequence of zones visited, not every heartbeat re-emit."""
+        track = PersonTrack(0.0)
+        for frame in range(CONFIRM_FRAMES):
+            track.observe(detection(), float(frame))
+        track.mark_emitted("zone-a", 5.0)
+        track.mark_emitted("zone-a", 6.0)
+        track.mark_emitted("zone-b", 7.0)
+        track.mark_emitted("zone-a", 8.0)
+        self.assertEqual(list(track.zone_history), ["zone-a", "zone-b", "zone-a"])
+
 
 class TrackRegistryTests(unittest.TestCase):
     """Registry bookkeeping across frames."""
