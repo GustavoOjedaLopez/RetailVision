@@ -1,6 +1,6 @@
 # RetailVision
 
-[![CI](https://github.com/Pedrosan26/RetailVision/actions/workflows/ci.yml/badge.svg)](https://github.com/Pedrosan26/RetailVision/actions/workflows/ci.yml)
+[![CI](https://github.com/GustavoOjedaLopez/RetailVision/actions/workflows/ci.yml/badge.svg)](https://github.com/GustavoOjedaLopez/RetailVision/actions/workflows/ci.yml)
 
 Real-time computer vision system that turns retail camera feeds into
 anonymized occupancy and demographic analytics — measuring **how many
@@ -18,6 +18,21 @@ Three components, each independently runnable:
 
 Model accuracy, evaluation methodology, and known limitations:
 **[RESULTS.md](RESULTS.md)**.
+
+## Credits and project history
+
+RetailVision was originally designed and built by **Pedro**
+([@Pedrosan26](https://github.com/Pedrosan26/RetailVision)) at Mirai Innovation
+Lab: the camera pipeline, the face, age, gender and emotion models, tracking,
+ArUco marker-based zones, the server and the dashboard.
+
+This repository continues that work. **Gustavo Ojeda**
+([@GustavoOjedaLopez](https://github.com/GustavoOjedaLopez)) is extending it with
+**Predictive Assistance Alerts**: a layer that detects when a customer probably
+needs help (for example, staying in one zone for a long time, or moving back and
+forth between zones) and notifies staff in real time, without identifying anyone.
+Changes made as part of that work are marked in the code with
+`# Gustavo Ojeda -- Predictive Assistance Alerts:` comments.
 
 ---
 
