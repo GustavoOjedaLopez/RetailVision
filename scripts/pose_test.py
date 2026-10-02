@@ -14,6 +14,23 @@ import cv2
 from ultralytics import YOLO
 
 
+# Gustavo Ojeda -- Predictive Assistance Alerts: COCO keypoint indices used by YOLO
+# pose models (0 nose, 1-4 eyes/ears, 5-6 shoulders, 7-8 elbows, 9-10 wrists,
+# 11-12 hips, 13-14 knees, 15-16 ankles).
+LEFT_SHOULDER, RIGHT_SHOULDER = 5,6
+LEFT_WRIST, RIGHT_WRIST = 9,10
+
+
+def hand_raised(xy, conf, min_conf: float = 0.5) -> bool:
+    """True if either wrist is above its shoulder, using only keypoints the model is confident about"""
+    for wrist, shoulder in ((LEFT_WRIST, LEFT_SHOULDER), (RIGHT_WRIST, RIGHT_SHOULDER)):
+        if conf[wrist] < min_conf or conf[shoulder] < min_conf:
+            continue
+        if xy[wrist][1] < xy[shoulder][1]:
+            return True
+    return False
+
+
 def main() -> None:
     """Open the camera, draw every person's skeleton live, and report the average FPS."""
     parser = argparse.ArgumentParser(description="Live body pose test")
@@ -38,8 +55,17 @@ def main() -> None:
         if not ok:
             break
 
-        results = model(frame, verbose=False, conf=args.conf)
+        results = model.track(frame, persist=True, conf=args.conf, verbose=False)
         annotated = results[0].plot()
+        # Gustavo Ojeda -- Predictive Assistance Alerts: read each person's keypoints as numbers
+        # and flag anyone with a hand raised -- the first hand-crafted body feature.
+        result = results[0]
+        boxes = result.boxes.xyxy.int().tolist()
+        all_xy = result.keypoints.xy.tolist()
+        all_conf = result.keypoints.conf.tolist()
+        for box, xy, kp_conf in zip(boxes, all_xy, all_conf):
+            if hand_raised(xy, kp_conf):
+                cv2.putText(annotated, "HAND UP", (box[0], box[3] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255),2)
 
         frames += 1
         fps = frames / (time.perf_counter() - start)
