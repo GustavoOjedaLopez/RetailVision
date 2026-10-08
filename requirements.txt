@@ -24,3 +24,4 @@ tf-keras
 # the server for live preview frames, instead of paying an HTTP round-trip
 # per image. Sync client, which suits the pipeline's threaded model.
 websocket-client
+numpy
