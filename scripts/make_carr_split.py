@@ -14,11 +14,12 @@ from scripts.explore_carr import DEFAULT_ROOT, frame_number
 
 N_BLOCKS = 10
 TEST_BLOCKS = (2, 7)
+VAL_BLOCKS= (5,)
 GAP = 30
 
 
-def split_frames(numbers, n_blocks=N_BLOCKS, test_blocks=TEST_BLOCKS, gap=GAP):
-    """Return {frame_number: "train" or "test"}; frames in the edge buffer are left out."""
+def split_frames(numbers, n_blocks=N_BLOCKS, test_blocks=TEST_BLOCKS, val_blocks=VAL_BLOCKS, gap=GAP):
+    """Return {frame_number: "train", "val" or "test"}; frames in the edge buffer are left out."""
     numbers = sorted(numbers)
     block_size = len(numbers) / n_blocks
     result = {}
@@ -28,7 +29,13 @@ def split_frames(numbers, n_blocks=N_BLOCKS, test_blocks=TEST_BLOCKS, gap=GAP):
         block_end = int((block + 1) * block_size)
         if position < block_start + gap or position >= block_end - gap:
             continue
-        result[number] = "test" if block in test_blocks else "train"
+        # Gustavo Ojeda -- Predictive Assistance Alerts: one block for validation, to compare models without touching test
+        if block in test_blocks:
+            result[number] = "test"
+        elif block in val_blocks:
+            result[number] = "val"
+        else:
+            result[number] = "train"
     return result
 
 
@@ -44,7 +51,7 @@ def main():
         split = split_frames(numbers)
         counts = Counter(split.values())
         dropped = len(numbers) - len(split)
-        print(f"{class_dir.name}: train {counts['train']}, test {counts['test']}, dropped {dropped}")
+        print(f"{class_dir.name}: train {counts['train']}, val {counts['val']}, test {counts['test']}, dropped {dropped}")
         for number in sorted(split):
             lines.append(f"{class_dir.name},{number},{split[number]}")
 
