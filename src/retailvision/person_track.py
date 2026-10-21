@@ -61,6 +61,11 @@ HEARTBEAT_SECONDS = 10.0
 #This will remember the 5 last zones where each person has passed
 ZONE_HISTORY_LENGTH = 5
 
+# Gustavo Ojeda -- Predictive Assistance Alerts: how long someone must be seen outside their
+# zone before it counts as leaving it. Shorter absences (leaning, turning the head, a
+# noisy position estimate) are ignored, so they no longer restart the dwell timer.
+ZONE_GRACE_SECONDS = 3.0
+
 
 class PersonTrack:
     """One tracked person: votes on their identity, smooths their emotion, and remembers what was last reported."""
@@ -83,6 +88,10 @@ class PersonTrack:
         # how long someone stays in a zone.
         self.zone_entered_at: float = timestamp
         self.zone_history: deque[str] = deque(maxlen=ZONE_HISTORY_LENGTH)
+        # Gustavo Ojeda -- Predictive Assistance Alerts: the zone the dwell timer belongs to, and
+        # when the track was first seen somewhere else (None while it is still in that zone).
+        self.dwell_zone: str | None = None
+        self._away_since: float | None = None
 
     @property
     def confirmed(self) -> bool:
@@ -120,15 +129,30 @@ class PersonTrack:
 
     def mark_emitted(self, zone_id: str | None, timestamp: float) -> None:
         """Record what was just reported, so the next frame is compared against it."""
-        # Gustavo Ojeda -- Predictive Assistance Alerts: only reset the zone timer and record the
-        # new zone when the zone actually changed, not on every heartbeat re-emit.
-        if zone_id != self.last_emitted_zone:
-            self.zone_entered_at = timestamp
-            if zone_id is not None:
-                self.zone_history.append(zone_id)
+        # Gustavo Ojeda -- Predictive Assistance Alerts: the dwell timer and zone history used to be
+        # updated here; they moved to observe_zone(), which sees every frame and can apply
+        # the grace period.
         self.last_emitted_at = timestamp
         self.last_emitted_emotion = self.emotion
         self.last_emitted_zone = zone_id
+
+    # Gustavo Ojeda -- Predictive Assistance Alerts: called once per frame with the zone the
+    # person is in right now. Only a change that lasts ZONE_GRACE_SECONDS restarts the
+    # dwell timer; a shorter absence is forgotten as soon as they are back.
+    def observe_zone(self, zone_id: str | None, timestamp: float) -> None:
+        """Fold this frame's zone into the dwell timer, ignoring zone changes shorter than the grace period."""
+        if zone_id == self.dwell_zone:
+            self._away_since = None
+            return
+        if self._away_since is None:
+            self._away_since = timestamp
+            return
+        if timestamp - self._away_since >= ZONE_GRACE_SECONDS:
+            self.dwell_zone = zone_id
+            self.zone_entered_at = self._away_since
+            self._away_since = None
+            if zone_id is not None:
+                self.zone_history.append(zone_id)
 
     # Gustavo Ojeda -- Predictive Assistance Alerts: exposes the zone dwell timer so callers
     # can read how long this track has continuously been in its current zone.

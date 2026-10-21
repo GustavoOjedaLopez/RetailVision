@@ -415,6 +415,12 @@ def main() -> None:
                     [zone for zone, person in zip(zone_ids, people) if person.confirmed]
                 )
 
+            # Gustavo Ojeda -- Predictive Assistance Alerts: feed every frame's zone into each
+            # person's dwell timer, so a brief zone flicker (leaning, detection noise) does not
+            # restart it -- only a zone change that lasts ZONE_GRACE_SECONDS does.
+            for zone_id, person in zip(zone_ids, people):
+                person.observe_zone(zone_id, timestamp)
+
             # One record per person per change, not one per person per frame.
             # A track is reported only once its age/gender vote has settled,
             # and then only when its emotion or zone moves, or the heartbeat

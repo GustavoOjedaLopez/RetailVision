@@ -11,6 +11,7 @@ import unittest
 from src.retailvision.person_track import (
     CONFIRM_FRAMES,
     HEARTBEAT_SECONDS,
+    ZONE_GRACE_SECONDS,
     PersonTrack,
     TrackRegistry,
     reported_detection,
@@ -20,6 +21,14 @@ from src.retailvision.person_track import (
 def detection(age_group="18-40", gender="Female", emotion="neutral") -> dict:
     """Build a minimal process_frame()-shaped detection."""
     return {"age_group": age_group, "gender": gender, "emotion": emotion, "bbox": (0, 0, 10, 10)}
+
+
+# Gustavo Ojeda -- Predictive Assistance Alerts: helper that reports the same zone once per
+# second from `start` up to (not including) `end`, the way the pipeline reports it every frame.
+def feed_zone(track: PersonTrack, zone_id, start: int, end: int) -> None:
+    """Report zone_id to the track once per second over [start, end)."""
+    for second in range(start, end):
+        track.observe_zone(zone_id, float(second))
 
 
 class PersonTrackTests(unittest.TestCase):
@@ -99,25 +108,31 @@ class PersonTrackTests(unittest.TestCase):
         self.assertEqual(record["gender"], "Female")
         self.assertEqual(record["emotion"], "neutral")
 
-    def test_dwell_in_zone_resets_on_zone_change(self):
-        """dwell_in_zone measures time since the track's last zone change, not since it was first seen."""
+    # Gustavo Ojeda -- Predictive Assistance Alerts: the dwell tests feed one zone per second,
+    # like the pipeline feeds one per frame, through observe_zone().
+    def test_dwell_in_zone_resets_on_sustained_zone_change(self):
+        """A zone change that lasts the grace period restarts the timer, counted from when the person left."""
         track = PersonTrack(0.0)
-        for frame in range(CONFIRM_FRAMES):
-            track.observe(detection(), float(frame))
-        track.mark_emitted("zone-a", 5.0)
-        self.assertEqual(track.dwell_in_zone(15.0), 10.0)
-        track.mark_emitted("zone-b", 20.0)
-        self.assertEqual(track.dwell_in_zone(21.0), 1.0)
+        feed_zone(track, "zone-a", 0, 10)
+        self.assertEqual(track.dwell_in_zone(10.0), 10.0)
+        feed_zone(track, "zone-b", 10, 15)
+        self.assertEqual(track.dwell_in_zone(15.0), 5.0)
 
-    def test_zone_history_records_zone_changes_only(self):
-        """zone_history remembers the sequence of zones visited, not every heartbeat re-emit."""
+    def test_brief_zone_flicker_does_not_reset_dwell(self):
+        """Leaving the zone for less than the grace period (e.g. leaning) keeps the timer running."""
         track = PersonTrack(0.0)
-        for frame in range(CONFIRM_FRAMES):
-            track.observe(detection(), float(frame))
-        track.mark_emitted("zone-a", 5.0)
-        track.mark_emitted("zone-a", 6.0)
-        track.mark_emitted("zone-b", 7.0)
-        track.mark_emitted("zone-a", 8.0)
+        feed_zone(track, "zone-a", 0, 10)
+        feed_zone(track, None, 10, 10 + int(ZONE_GRACE_SECONDS) - 1)
+        feed_zone(track, "zone-a", 10 + int(ZONE_GRACE_SECONDS) - 1, 20)
+        self.assertEqual(track.dwell_in_zone(20.0), 20.0)
+
+    def test_zone_history_records_confirmed_changes_only(self):
+        """zone_history remembers real zone changes, not brief flickers."""
+        track = PersonTrack(0.0)
+        feed_zone(track, "zone-a", 0, 6)
+        feed_zone(track, "zone-b", 6, 11)
+        feed_zone(track, None, 11, 12)
+        feed_zone(track, "zone-a", 12, 17)
         self.assertEqual(list(track.zone_history), ["zone-a", "zone-b", "zone-a"])
 
 
