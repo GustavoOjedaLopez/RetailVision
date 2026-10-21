@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-WINDOW = 30            # frames per window
+WINDOW = 60            # frames per window (60 beat 30 on validation, 2026-10-20)
 STRIDE = 15            # a new window starts every STRIDE frames (windows overlap by half)
 MIN_CONF = 0.3         # keypoints below this confidence are treated as missing
 MIN_BOX_OVERLAP = 0.5  # below this, two consecutive boxes are a scene cut
@@ -28,6 +28,13 @@ NAMES = ["nose", "l_eye", "r_eye", "l_ear", "r_ear", "l_shoulder", "r_shoulder",
 L_EAR, R_EAR = 3, 4
 L_SHOULDER, R_SHOULDER, L_ELBOW, R_ELBOW, L_WRIST, R_WRIST = 5, 6, 7, 8, 9, 10
 BOX_COLUMNS = ["box_x1", "box_y1", "box_x2", "box_y2"]
+# Gustavo Ojeda -- Predictive Assistance Alerts: actions a skeleton can hardly tell apart, joined into 4 groups
+GROUPS = {
+    "No Interest": "not engaged",
+    "Viewing": "looking", "Turning to Shelf": "looking",
+    "Touching": "touching",
+    "Picking And Returning": "picking", "Picking and Putting": "picking",
+}
 
 
 def stat(function, values):
