@@ -21,6 +21,9 @@ WINDOW = 60            # frames per window (60 beat 30 on validation, 2026-10-20
 STRIDE = 15            # a new window starts every STRIDE frames (windows overlap by half)
 MIN_CONF = 0.3         # keypoints below this confidence are treated as missing
 MIN_BOX_OVERLAP = 0.5  # below this, two consecutive boxes are a scene cut
+# Gustavo Ojeda -- Predictive Assistance Alerts: CARR video speed, measured with the clock printed on the images
+# (Picking And Returning frames 100 and 2800: 13:04:37 -> 13:06:37, 2700 frames in 120 s)
+CARR_FPS = 22.5
 
 NAMES = ["nose", "l_eye", "r_eye", "l_ear", "r_ear", "l_shoulder", "r_shoulder",
          "l_elbow", "r_elbow", "l_wrist", "r_wrist", "l_hip", "r_hip",
@@ -61,8 +64,12 @@ def segments(frames, splits, boxes):
     yield from zip(edges[:-1], edges[1:])
 
 
-def window_features(xy, conf, boxes):
-    """Describe one window with numbers. xy: (T, 17, 2) pixels, conf: (T, 17), boxes: (T, 4)."""
+def window_features(xy, conf, boxes, speed_scale=1.0):
+    """Describe one window with numbers. xy: (T, 17, 2) pixels, conf: (T, 17), boxes: (T, 4).
+
+    speed_scale converts per-frame movements from another camera to CARR frames:
+    live_fps / CARR_FPS (a camera at half the fps sees twice the movement per frame).
+    """
     width = boxes[:, 2] - boxes[:, 0]
     height = boxes[:, 3] - boxes[:, 1]
     size = np.median(height)  # person size, so movements are comparable near and far from the camera
@@ -82,7 +89,7 @@ def window_features(xy, conf, boxes):
 
     # Hands and elbows: how fast they move between frames, relative to body size
     for i in (L_ELBOW, R_ELBOW, L_WRIST, R_WRIST):
-        step = np.linalg.norm(np.diff(points[:, i], axis=0), axis=1) / size
+        step = np.linalg.norm(np.diff(points[:, i], axis=0), axis=1) / size * speed_scale
         f[f"{NAMES[i]}_speed"] = stat(np.mean, step)
         f[f"{NAMES[i]}_speed_max"] = stat(np.max, step)
 
@@ -102,7 +109,7 @@ def window_features(xy, conf, boxes):
     center = np.c_[(boxes[:, 0] + boxes[:, 2]) / 2, (boxes[:, 1] + boxes[:, 3]) / 2]
     f["box_aspect_mean"] = np.mean(width / height)
     f["box_aspect_std"] = np.std(width / height)
-    f["body_speed"] = np.mean(np.linalg.norm(np.diff(center, axis=0), axis=1)) / size
+    f["body_speed"] = np.mean(np.linalg.norm(np.diff(center, axis=0), axis=1)) / size * speed_scale
     f["body_displacement"] = np.linalg.norm(center[-1] - center[0]) / size
     f["box_height_change"] = height[-1] / height[0]
     return f
