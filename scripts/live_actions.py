@@ -7,10 +7,13 @@ For every tracked person the last ~2.7 s of keypoints are kept (the same duratio
 and the saved model predicts: looking / touching / picking / not engaged.
 
 Pilot recording (optional, --record): every frame of every person is saved to a CSV
-(keypoints only, no images) together with the model's current prediction and a task
-label you set with the keyboard while recording:
-    n = normal task      h = needs-help task      0 = no task (between tasks)
-    q = quit
+(keypoints only, no images) together with the model's current prediction and two
+labels you set with the keyboard while recording:
+    action (Level 1, what you are doing now):
+        1 = looking   2 = touching   3 = picking   4 = not engaged   5 = phone
+    task (Level 2, which kind of task you are doing):
+        n = normal task      h = needs-help task
+    0 = clear both labels (between tasks)      q = quit
 --video also saves the annotated video, only for self-tests (never with volunteers
 without their consent).
 """
@@ -29,7 +32,10 @@ from ultralytics import YOLO
 
 from scripts.build_carr_windows import CARR_FPS, STRIDE, WINDOW, window_features
 
-TASK_KEYS = {ord("n"): "normal", ord("h"): "needs_help", ord("0"): "none"}
+TASK_KEYS = {ord("n"): "normal", ord("h"): "needs_help"}
+# Gustavo Ojeda -- Predictive Assistance Alerts: action labels for our own lab data (Level 1 adaptation)
+ACTION_KEYS = {ord("1"): "looking", ord("2"): "touching", ord("3"): "picking", ord("4"): "not engaged",
+               ord("5"): "phone"}  # phone is not in CARR: only our lab data can teach it
 
 
 class ActionRecognizer:
@@ -81,7 +87,7 @@ def main():
     parser.add_argument("--model", type=Path, default=Path("data/carr/level1_model.joblib"))
     parser.add_argument("--pose-model", default="yolov8n-pose.pt")
     parser.add_argument("--conf", type=float, default=0.5)
-    parser.add_argument("--record", type=Path, help="save keypoints + predictions + task labels to this CSV")
+    parser.add_argument("--record", type=Path, help="save keypoints + predictions + action/task labels to this CSV")
     parser.add_argument("--video", type=Path, help="also save the annotated video (self-tests only)")
     args = parser.parse_args()
 
@@ -96,11 +102,11 @@ def main():
         args.record.parent.mkdir(parents=True, exist_ok=True)
         csv_file = open(args.record, "w", newline="")
         writer = csv.writer(csv_file)
-        writer.writerow(["time", "frame", "track_id", "task", "predicted", "probability",
+        writer.writerow(["time", "frame", "track_id", "action", "task", "predicted", "probability",
                          "box_x1", "box_y1", "box_x2", "box_y2"]
                         + [f"kp{i}_{a}" for i in range(17) for a in ("x", "y", "conf")])
 
-    task, frame_index, start = "none", 0, time.time()
+    action, task, frame_index, start = "none", "none", 0, time.time()
     while True:
         ok, frame = camera.read()
         if not ok:
@@ -125,7 +131,7 @@ def main():
                 cv2.rectangle(annotated, (x1, label_y - label_h - 6), (x1 + label_w + 6, label_y + 6), (0, 0, 0), -1)
                 cv2.putText(annotated, label, (x1 + 3, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
                 if writer:
-                    writer.writerow([round(time.time() - start, 3), frame_index, track_id, task,
+                    writer.writerow([round(time.time() - start, 3), frame_index, track_id, action, task,
                                      prediction[0] if prediction else "", round(prediction[1], 3) if prediction else "",
                                      *[round(float(v), 1) for v in box],
                                      *[round(float(v), 3) for pair in zip(xy[:, 0], xy[:, 1], conf) for v in pair]])
@@ -133,7 +139,7 @@ def main():
         # Gustavo Ojeda -- Predictive Assistance Alerts: small status text in the bottom-right corner,
         # so it never covers the prediction written over the person
         fps = frame_index / (time.time() - start)
-        status = f"FPS {fps:.1f} | task: {task}" + (" | REC" if writer else "")
+        status = f"FPS {fps:.1f} | action: {action} | task: {task}" + (" | REC" if writer else "")
         (text_w, text_h), _ = cv2.getTextSize(status, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
         height, width = annotated.shape[:2]
         corner = (width - text_w - 10, height - 10)
@@ -152,6 +158,12 @@ def main():
         if key in TASK_KEYS:
             task = TASK_KEYS[key]
             print(f"[{time.time() - start:7.1f} s] task -> {task}")
+        if key in ACTION_KEYS:
+            action = ACTION_KEYS[key]
+            print(f"[{time.time() - start:7.1f} s] action -> {action}")
+        if key == ord("0"):
+            action, task = "none", "none"
+            print(f"[{time.time() - start:7.1f} s] labels cleared")
 
     camera.release()
     if csv_file:
