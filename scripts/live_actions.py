@@ -81,6 +81,12 @@ class ActionRecognizer:
         return self.prediction.get(track_id)
 
 
+def measured_fps(timed_frames, skip):
+    """Frames per second of (time, frame) pairs, ignoring the first `skip` seconds."""
+    times = [t for t, _ in timed_frames if t >= skip] or [t for t, _ in timed_frames]
+    return (len(times) - 1) / (times[-1] - times[0]) if len(times) > 1 and times[-1] > times[0] else 10.0
+
+
 def open_video(path, frames, fps):
     """Create the video file at the measured fps and write the frames kept so far."""
     height, width = frames[0].shape[:2]
@@ -156,11 +162,12 @@ def main():
         cv2.putText(annotated, status, corner, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         if args.video:
             # Gustavo Ojeda -- Predictive Assistance Alerts: the saved video must play at the REAL speed.
-            # Keep the first 5 s in memory, measure the fps, then open the video file with that fps.
+            # Keep the first 8 s in memory and measure the fps on seconds 3-8 only (the first seconds
+            # are slow while the model warms up), then open the video file with that fps.
             if video is None:
-                pending.append(annotated)
-                if time.time() - start >= 5:
-                    video = open_video(args.video, pending, frame_index / (time.time() - start))
+                pending.append((time.time() - start, annotated))
+                if pending[-1][0] >= 8:
+                    video = open_video(args.video, [f for _, f in pending], measured_fps(pending, skip=3))
                     pending = []
             else:
                 video.write(annotated)
@@ -184,7 +191,7 @@ def main():
         csv_file.close()
         print(f"Saved recording to {args.record}")
     if video is None and pending:  # very short run: save what we have
-        video = open_video(args.video, pending, frame_index / (time.time() - start))
+        video = open_video(args.video, [f for _, f in pending], measured_fps(pending, skip=0))
     if video is not None:
         video.release()
         print(f"Saved video to {args.video}")
