@@ -81,6 +81,15 @@ class ActionRecognizer:
         return self.prediction.get(track_id)
 
 
+def open_video(path, frames, fps):
+    """Create the video file at the measured fps and write the frames kept so far."""
+    height, width = frames[0].shape[:2]
+    video = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), max(1.0, round(fps, 1)), (width, height))
+    for frame in frames:
+        video.write(frame)
+    return video
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source", type=int, default=0, help="camera index")
@@ -97,7 +106,7 @@ def main():
     if not camera.isOpened():
         raise SystemExit(f"Could not open camera {args.source}")
 
-    writer, csv_file, video = None, None, None
+    writer, csv_file, video, pending = None, None, None, []
     if args.record:
         args.record.parent.mkdir(parents=True, exist_ok=True)
         csv_file = open(args.record, "w", newline="")
@@ -146,10 +155,15 @@ def main():
         cv2.rectangle(annotated, (corner[0] - 5, corner[1] - text_h - 5), (width - 5, height - 5), (0, 0, 0), -1)
         cv2.putText(annotated, status, corner, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         if args.video:
+            # Gustavo Ojeda -- Predictive Assistance Alerts: the saved video must play at the REAL speed.
+            # Keep the first 5 s in memory, measure the fps, then open the video file with that fps.
             if video is None:
-                height, width = annotated.shape[:2]
-                video = cv2.VideoWriter(str(args.video), cv2.VideoWriter_fourcc(*"mp4v"), 20, (width, height))
-            video.write(annotated)
+                pending.append(annotated)
+                if time.time() - start >= 5:
+                    video = open_video(args.video, pending, frame_index / (time.time() - start))
+                    pending = []
+            else:
+                video.write(annotated)
         cv2.imshow("Level 1 live", annotated)
 
         key = cv2.waitKey(1) & 0xFF
@@ -169,8 +183,11 @@ def main():
     if csv_file:
         csv_file.close()
         print(f"Saved recording to {args.record}")
+    if video is None and pending:  # very short run: save what we have
+        video = open_video(args.video, pending, frame_index / (time.time() - start))
     if video is not None:
         video.release()
+        print(f"Saved video to {args.video}")
     cv2.destroyAllWindows()
 
 
