@@ -10,7 +10,8 @@ a real customer arrives from zero).
 Each segment of the recording is scored:
     needs help = the volunteer did NOT find the product (task lasted 85 s or more)
     found      = found it (shorter task)
-    calm       = normal shopping: every segment of a *_tareas_b file, and Tarea 7 (the 7th task)
+    calm       = normal shopping: every segment of a *_tareas_b file, and Tarea 7 (the 7th task) of the
+                 files listed in TAREA7_FILES (p09 and p10 had 6 tasks + Tarea 7; p11 onwards have 8 tasks, no Tarea 7)
 Calm segments are also cut into 4 "visits" of ~1 minute each (a new customer each time), closer to a
 real store where few customers stay long in one aisle.
 
@@ -37,6 +38,7 @@ XY = [f"kp{i}_{a}" for i in range(17) for a in ("x", "y")]
 CONF = [f"kp{i}_conf" for i in range(17)]
 HELP_SECONDS = 85
 CALM_TASK = 7          # Tarea 7 = "look around and take any two products": normal shopping
+TAREA7_FILES = {"p09_tareas_a", "p10_tareas_a"}   # only these recordings have a Tarea 7
 
 
 def level1_events(table, recognizer):
@@ -79,7 +81,7 @@ def level2_pass(events, level2=None, resets=(), collect=False):
     return fired, rows
 
 
-def tasks_of(table, calm_file=False):
+def tasks_of(table, calm_file=False, calm_task=None):
     """Segments from the n/h key labels: card, start, end, duration and kind (needs_help / found / calm)."""
     frames = table.groupby("frame").first().sort_index()
     label, time = frames["task"].to_numpy(), frames["time"].to_numpy()
@@ -90,7 +92,7 @@ def tasks_of(table, calm_file=False):
         if start is not None and (i == len(label) - 1 or label[i + 1] != label[i]):
             duration = time[i] - time[start]
             number = len(out) + 1
-            kind = "calm" if calm_file or number == CALM_TASK else ("needs_help" if duration >= HELP_SECONDS else "found")
+            kind = "calm" if calm_file or number == calm_task else ("needs_help" if duration >= HELP_SECONDS else "found")
             out.append({"task": number, "card": label[i], "start": time[start], "end": time[i],
                         "duration": round(duration, 1), "kind": kind})
             start = None
@@ -119,7 +121,8 @@ def main():
     rows, visit_rows, between = [], [], 0
     for path in args.recordings:
         table = pd.read_csv(path)
-        tasks = tasks_of(table, calm_file=path.stem.endswith("_tareas_b"))
+        tasks = tasks_of(table, calm_file=path.stem.endswith("_tareas_b"),
+                         calm_task=CALM_TASK if path.stem in TAREA7_FILES else None)
         events = level1_events(table, ActionRecognizer(args.model))
         # new customer at the start of each task; the time between tasks (reading the next card) is its own "visit"
         fired, _ = level2_pass(events, level2, resets=tasks.start.tolist() + (tasks.end + 0.01).tolist())
