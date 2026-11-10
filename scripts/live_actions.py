@@ -16,6 +16,12 @@ labels you set with the keyboard while recording:
     0 = clear both labels (between tasks)      q = quit
 --video also saves the annotated video, only for self-tests (never with volunteers
 without their consent).
+
+Level 2 (optional, --level2 data/pilot/level2_v1.json): after 20 s, each person also gets a
+"needs help" probability from their behavior (Level 1 actions + body movement, see level2.py);
+a sustained high probability turns their box red and, with --alerts http://localhost:8000,
+sends an alert to the staff page (scripts/alert_server.py). The alert settings (threshold,
+minimum seconds in view, alerts per person) are read from the same JSON file.
 """
 
 import argparse
@@ -30,7 +36,9 @@ import numpy as np
 import pandas as pd
 from ultralytics import YOLO
 
+from scripts.alert_server import send_alert
 from scripts.build_carr_windows import CARR_FPS, STRIDE, WINDOW, window_features
+from scripts.level2 import BehaviorTracker, IdRelinker, Level2Model
 
 TASK_KEYS = {ord("n"): "normal", ord("h"): "needs_help"}
 # Gustavo Ojeda -- Predictive Assistance Alerts: action labels for our own lab data (Level 1 adaptation)
@@ -46,8 +54,8 @@ class ActionRecognizer:
     whatever the live camera's fps is. Speeds are converted to CARR frames with speed_scale.
     """
 
-    def __init__(self, model_path, seconds=WINDOW / CARR_FPS, every_seconds=STRIDE / CARR_FPS):
-        saved = joblib.load(model_path)
+    def __init__(self, model_path=None, seconds=WINDOW / CARR_FPS, every_seconds=STRIDE / CARR_FPS, saved=None):
+        saved = saved if saved is not None else joblib.load(model_path)   # a saved file, or a model already in memory
         self.model, self.features = saved["model"], saved["features"]
         self.seconds, self.every_seconds = seconds, every_seconds
         self.history = {}      # track id -> deque of (time, xy, conf, box)
@@ -104,9 +112,18 @@ def main():
     parser.add_argument("--conf", type=float, default=0.5)
     parser.add_argument("--record", type=Path, help="save keypoints + predictions + action/task labels to this CSV")
     parser.add_argument("--video", type=Path, help="also save the annotated video (self-tests only)")
+    parser.add_argument("--level2", type=Path, help="Level 2 model (JSON) to estimate 'needs help' from behavior")
+    parser.add_argument("--alerts", help="alert page address, e.g. http://localhost:8000 (needs --level2)")
+    parser.add_argument("--camera", default="aisle-1", help="name of this camera, shown in the alerts")
     args = parser.parse_args()
 
     recognizer = ActionRecognizer(args.model)
+    # Gustavo Ojeda -- Predictive Assistance Alerts: Level 2 pieces (only used with --level2)
+    relinker = IdRelinker()
+    level2 = Level2Model(args.level2) if args.level2 else None
+    behavior = BehaviorTracker()
+    alerts = level2.alert_logic() if level2 else None
+    help_probability = {}   # stable id -> smoothed "needs help" probability
     pose = YOLO(args.pose_model)
     camera = cv2.VideoCapture(args.source)
     if not camera.isOpened():
@@ -135,18 +152,37 @@ def main():
             boxes = result.boxes.xyxy.numpy()
             xys = result.keypoints.xy.numpy()
             confs = result.keypoints.conf.numpy()
+            now = time.time() - start
             for track_id, box, xy, conf in zip(ids, boxes, xys, confs):
-                prediction = recognizer.update(track_id, frame_index, time.time() - start, xy, conf, box)
-                label = f"ID {track_id}: " + (f"{prediction[0]} {prediction[1]:.0%}" if prediction else "...")
+                person = relinker.update(track_id, now, box)   # same ID again after a short interruption
+                prediction = recognizer.update(person, frame_index, now, xy, conf, box)
+                if level2:
+                    behavior.add_frame(person, now, xy, conf, box)   # path B: head and wrists, every frame
+                if level2 and prediction and recognizer.last_predicted.get(person) == now:
+                    # Gustavo Ojeda -- Predictive Assistance Alerts: a new Level 1 action -> update Level 2 (path A)
+                    behavior.add(person, now, prediction[0], box)
+                    values = behavior.features(person)
+                    if values:
+                        smoothed, send = alerts.update(person, now, level2.probability(values), behavior.age(person, now))
+                        help_probability[person] = smoothed
+                        if send:
+                            print(f"[{now:7.1f} s] ALERT: ID {person} may need help ({smoothed:.0%})")
+                            if args.alerts:
+                                send_alert(args.alerts, args.camera, person, smoothed, "searching behavior over the last 20 s")
+                label = f"ID {person}: " + (f"{prediction[0]} {prediction[1]:.0%}" if prediction else "...")
+                if person in help_probability:
+                    label += f" | help {help_probability[person]:.0%}"
+                alert_on = level2 is not None and alerts.alerted(person, now)
+                color = (0, 0, 255) if alert_on else (255, 0, 0)   # red box while the alert is active
                 x1, y1 = int(box[0]), int(box[1])
-                cv2.rectangle(annotated, (x1, y1), (int(box[2]), int(box[3])), (255, 0, 0), 2)
+                cv2.rectangle(annotated, (x1, y1), (int(box[2]), int(box[3])), color, 3 if alert_on else 2)
                 # Label above the box, or just inside it when the box touches the top of the image
                 label_y = y1 - 10 if y1 > 30 else y1 + 25
                 (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-                cv2.rectangle(annotated, (x1, label_y - label_h - 6), (x1 + label_w + 6, label_y + 6), (0, 0, 0), -1)
+                cv2.rectangle(annotated, (x1, label_y - label_h - 6), (x1 + label_w + 6, label_y + 6), (0, 0, 180) if alert_on else (0, 0, 0), -1)
                 cv2.putText(annotated, label, (x1 + 3, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
                 if writer:
-                    writer.writerow([round(time.time() - start, 3), frame_index, track_id, action, task,
+                    writer.writerow([round(now, 3), frame_index, track_id, action, task,
                                      prediction[0] if prediction else "", round(prediction[1], 3) if prediction else "",
                                      *[round(float(v), 1) for v in box],
                                      *[round(float(v), 3) for pair in zip(xy[:, 0], xy[:, 1], conf) for v in pair]])
