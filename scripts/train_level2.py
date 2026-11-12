@@ -37,8 +37,9 @@ FEATURES = ["pct_looking", "pct_touching", "pct_hands_busy", "pct_not engaged", 
 # v1.1 (10 nov): path B over the last 60 s instead of 20 s. Same validation: same detection of lost shoppers,
 # about half the alerts to calm shoppers (1-min visits 35% -> 19%). The 20 s version is kept as level2_v1_20s.json.
 ALERT = {"min_age_s": 45.0, "hold_s": 5.0, "smooth": 5, "cooldown_s": 60.0, "max_alerts": 1}
-EXAM_PEOPLE = {"p09", "p10", "p16", "p17", "p18", "p19", "p20", "p21"}   # final exam: never used for training or choices
-# (11 new volunteers, 10 nov: the first 5 recorded, p11-p15, go to training; p16-p21 are the exam)
+EXAM_PEOPLE = {"p09", "p10", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23"}   # final exam: never used for training or choices
+# (11 new volunteers, 10 nov: the first 5 recorded, p11-p15, go to training; p16-p21 are the exam.
+#  12 nov: 2 possible extra volunteers, p22-p23, also go to the exam; decided before recording them)
 THRESHOLDS = (0.55, 0.60, 0.65)
 
 

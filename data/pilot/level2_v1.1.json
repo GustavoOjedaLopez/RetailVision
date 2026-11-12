@@ -1,0 +1,145 @@
+{
+  "name": "level2_v1.1",
+  "features": [
+    "pct_looking",
+    "pct_touching",
+    "pct_hands_busy",
+    "pct_not engaged",
+    "L_aisle_walk",
+    "L_head_scan",
+    "L_hand_high",
+    "L_still"
+  ],
+  "mean": [
+    0.326819,
+    0.165753,
+    0.494285,
+    0.013143,
+    0.428909,
+    0.064696,
+    0.226298,
+    0.453955
+  ],
+  "scale": [
+    0.265263,
+    0.194226,
+    0.265823,
+    0.036218,
+    0.243134,
+    0.034102,
+    0.210803,
+    0.150097
+  ],
+  "weights": [
+    -0.026333,
+    0.188211,
+    -0.075054,
+    -0.265591,
+    -0.067071,
+    0.294235,
+    0.481875,
+    -0.86164
+  ],
+  "intercept": -0.124442,
+  "threshold": 0.55,
+  "alert": {
+    "min_age_s": 45.0,
+    "hold_s": 5.0,
+    "smooth": 5,
+    "cooldown_s": 60.0,
+    "max_alerts": 1
+  },
+  "segment_seconds": 20,
+  "validation": {
+    "method": "leave-one-person-out, each task = new customer",
+    "chosen": {
+      "needs_help_detected": [
+        11,
+        19
+      ],
+      "found_with_alert": [
+        2,
+        11
+      ],
+      "calm_segments_with_alert": [
+        5,
+        9
+      ],
+      "calm_1min_visits_with_alert": [
+        6,
+        31
+      ],
+      "median_seconds_to_alert": 51.1
+    },
+    "all_thresholds": {
+      "0.55": {
+        "needs_help_detected": [
+          11,
+          19
+        ],
+        "found_with_alert": [
+          2,
+          11
+        ],
+        "calm_segments_with_alert": [
+          5,
+          9
+        ],
+        "calm_1min_visits_with_alert": [
+          6,
+          31
+        ],
+        "median_seconds_to_alert": 51.1
+      },
+      "0.6": {
+        "needs_help_detected": [
+          8,
+          19
+        ],
+        "found_with_alert": [
+          1,
+          11
+        ],
+        "calm_segments_with_alert": [
+          4,
+          9
+        ],
+        "calm_1min_visits_with_alert": [
+          6,
+          31
+        ],
+        "median_seconds_to_alert": 54.8
+      },
+      "0.65": {
+        "needs_help_detected": [
+          7,
+          19
+        ],
+        "found_with_alert": [
+          1,
+          11
+        ],
+        "calm_segments_with_alert": [
+          4,
+          9
+        ],
+        "calm_1min_visits_with_alert": [
+          6,
+          31
+        ],
+        "median_seconds_to_alert": 60.1
+      }
+    }
+  },
+  "trained_on": [
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08"
+  ],
+  "saved_at": "2026-11-10T06:11:26"
+}
