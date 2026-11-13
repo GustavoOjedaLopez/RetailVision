@@ -13,7 +13,7 @@ Why it is built this way:
     % calm 1-minute visits with an alert). The exam people are NEVER used here.
 
 Example:
-    python -m scripts.train_level2 --out data/pilot/level2_v1.json
+    python -m scripts.train_level2 --out data/pilot/level2_v1.2.json --rows data/pilot/level2_rows_v1.2.csv
 """
 
 import argparse
@@ -147,7 +147,7 @@ def main():
     print(f"chosen threshold (validation rule): {threshold}")
 
     scaler, lr = fit(rows)
-    model = {"name": "level2_v1.1", "features": FEATURES,
+    model = {"name": args.out.stem, "features": FEATURES,   # e.g. level2_v1.2.json -> "level2_v1.2"
              "mean": scaler.mean_.round(6).tolist(), "scale": scaler.scale_.round(6).tolist(),
              "weights": lr.coef_[0].round(6).tolist(), "intercept": round(float(lr.intercept_[0]), 6),
              "threshold": threshold, "alert": ALERT, "segment_seconds": 20,
