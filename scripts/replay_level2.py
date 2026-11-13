@@ -132,14 +132,14 @@ def main():
             used |= {a[0] for a in inside}
             rows.append({"recording": path.stem, "task": int(t.task), "card": t.card, "duration": t.duration, "kind": t.kind,
                          "alert": bool(inside), "alert_after_s": round(inside[0][0] - t.start, 1) if inside else None,
-                         "timer_alert": t.duration > args.timer})
+                         "timer_alert": bool(t.duration > args.timer)})
         between += sum(1 for a in fired if a[0] not in used)
         visits = visits_of(tasks)
         if len(visits):
             vfired, _ = level2_pass(events, level2, resets=visits.start.tolist())
             for _, v in visits.iterrows():
                 visit_rows.append({"recording": path.stem, "task": int(v.task), "alert": any(v.start <= a[0] < v.end for a in vfired),
-                                   "timer_alert": v.end - v.start > args.timer})
+                                   "timer_alert": bool(v.end - v.start > args.timer)})
         print(f"{path.stem}: {len(fired)} alerts, {len(tasks)} segments, {len(visits)} calm 1-min visits")
 
     R, V = pd.DataFrame(rows), pd.DataFrame(visit_rows, columns=["recording", "task", "alert", "timer_alert"])
